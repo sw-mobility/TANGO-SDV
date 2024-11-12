@@ -1,0 +1,31 @@
+<optimize_codegen>
+
+□ Functionality of this folder
+   o Generates template code for the target devices and the inference engines
+
+□ Operation Flow of this container
+   o Receives a neural network model from previous pipeline(AutoNN)
+   o Checks the types of target device and inference engine
+   o Generates template code that makes the neural network model run
+   o Generates a yaml file that is used by cloud, k8s or ondevice container
+
+□ Supported Targets
+------------------------------------------------------------------------------------------------------------------------------
+|  Type          |   CPU   |  Accelerator   |   OS             |  Neural Network Engine            |   Chip/Board/System Name |
+------------------------------------------------------------------------------------------------------------------------------
+|  Cloud         |   x64   |   CUDA         |   Linux          |   PyTorch                         |  Goolge Cloud Platform   |
+------------------------------------------------------------------------------------------------------------------------------|
+|  K8s           |   x64   |   CUDA         |   Linux          |   PyTorch                         |   PCs                    |
+------------------------------------------------------------------------------------------------------------------------------
+|  OnDevice      |   ARM   |   Mali GPU     |   Linux          |   ACL/ARMNN/PyARMNN               |  ODROID-N2+              | 
+|                |         |                |                  |                                   |  (Mali-G52 GPU)          |
+|                 ------------------------------------------------------------------------------------------------------------|
+|                |   ARM   |   CUDA         |   Linux          |   TensorRT/TVM/PyTorch            |  Jetson AGX Orin         | 
+|                |         |                |                  |                                   |                          | 
+|                 ------------------------------------------------------------------------------------------------------------|
+|                |   ARM   |   NPU          |   Linux          |   TensorflowLite                  |  Galaxy S22              | 
+|                 -------------------------------------------------------------------------------------------------------------
+|                |   x64   |   CUDA         |   Linux          |   PyTorch                         |   PCs                    |
+------------------------------------------------------------------------------------------------------------------------------
+
+
