@@ -63,7 +63,7 @@ class TaskAlignedAssigner(nn.Module):
         self.eps = eps
 
     @torch.no_grad()
-    def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt):
+    def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt, return_gt_idx=False):
         """This code referenced to
            https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py
 
@@ -84,10 +84,15 @@ class TaskAlignedAssigner(nn.Module):
         self.n_max_boxes = gt_bboxes.size(1)
         if self.n_max_boxes == 0:
             device = gt_bboxes.device
-            return (torch.full_like(pd_scores[..., 0], self.bg_idx).to(device),
-                    torch.zeros_like(pd_bboxes).to(device),
-                    torch.zeros_like(pd_scores).to(device),
-                    torch.zeros_like(pd_scores[..., 0]).to(device))
+            num_anchors = pd_scores.size(1)
+            target_labels = torch.full((self.bs, num_anchors), self.bg_idx, device=device, dtype=torch.long)
+            target_bboxes = torch.zeros_like(pd_bboxes, device=device)
+            target_scores = torch.zeros_like(pd_scores, device=device)
+            fg_mask = torch.zeros((self.bs, num_anchors), device=device, dtype=torch.bool)
+            if return_gt_idx:
+                target_gt_idx = torch.full((self.bs, num_anchors), -1, device=device, dtype=torch.long)
+                return target_labels, target_bboxes, target_scores, fg_mask, target_gt_idx
+            return target_labels, target_bboxes, target_scores, fg_mask
         # logger.info(f'\t\tTAL enter')
         mask_pos, align_metric, overlaps = self.get_pos_mask(pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points,
                                                              mask_gt)
@@ -105,6 +110,8 @@ class TaskAlignedAssigner(nn.Module):
         norm_align_metric = (align_metric * pos_overlaps / (pos_align_metrics + self.eps)).amax(-2).unsqueeze(-1)
         target_scores = target_scores * norm_align_metric
         # logger.info(f'\t\tTAL exit')
+        if return_gt_idx:
+            return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
         return target_labels, target_bboxes, target_scores, fg_mask.bool()
 
     def get_pos_mask(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt):

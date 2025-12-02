@@ -27,6 +27,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 # Local application imports
 from . import status_update, Info
 from .train import train
+from .continual import train_continual
 from .search import search
 from .evolve import evolve
 from .visualize import BasemodelViewer
@@ -45,6 +46,7 @@ from tango.utils.plots import plot_evolution
 # Constants
 COMMON_ROOT = Path("/shared/common")
 DATASET_ROOT = Path("/shared/datasets")
+COCO128_SEG_DATASET_ROOT = Path("/shared/datasets/coco128_seg")
 MODEL_ROOT = Path("/shared/models")
 CORE_DIR = Path(__file__).resolve().parent.parent.parent # /source/autonn_cl_core
 CFG_PATH = CORE_DIR / 'tango' / 'common' / 'cfg'
@@ -56,6 +58,7 @@ TASK_TO_MODEL_TABLE = {
     "detection": "yolov9",
     "classification": "resnet",
     "classification-c": "resnetc",
+    "segmentation": "yolov9"
 }
 
 # Model size mapping by target
@@ -204,6 +207,8 @@ def get_user_requirements(userid, projid, resume=False):
     # Adjust hyperparameter based on task
     if task == 'detection':
         basemodel_dict['hyp'] = 'p5' if basemodel_dict['hyp'] == 'tiny' else basemodel_dict['hyp']
+    elif task == 'segmentation':
+        basemodel_dict['hyp'] = 'seg'
     else:  # classification
         basemodel_dict['hyp'] = 'cls'
 
@@ -226,7 +231,11 @@ def get_user_requirements(userid, projid, resume=False):
     )
 
     # Load arguments
-    _task =  'detection7' if basemodel['model_name'] == 'YOLOV7' or target == 'galaxys22' else task
+    if (basemodel['model_name'] == 'YOLOV7' or target == 'galaxys22') and task == 'detection':
+        _task = 'detection7'
+    else:
+        _task = task
+    
     opt_yaml_path = PROJ_PATH / f'args-{_task}.yaml'
 
     if skip_bms:
@@ -342,61 +351,119 @@ def handle_chat_task():
 def get_dataset_info(dataset_name, task):
     """
     Get dataset information from dataset.yaml file.
-    
-    Args:
-        dataset_name: Name of the dataset
-        task: Type of task (detection, classification, etc.)
-        
-    Returns:
-        tuple
-            - dict: Dictionary containing dataset information
-            - Path: Path object pointing to dataset.yaml file
     """
+    if task == 'segmentation':
+        root_path = COCO128_SEG_DATASET_ROOT
+        if not root_path.exists():
+            raise FileNotFoundError('Segmentation dataset root not found: {}'.format(root_path))
+        dataset_yaml_path = root_path / 'dataset.yaml'
+        data_dict = create_segmentation_dataset_yaml(root_path, dataset_yaml_path)
+        return data_dict, dataset_yaml_path
+
+    dataset_yaml_path = None
+    data_dict = None
+
     if os.path.isdir(str(DATASET_ROOT / dataset_name)):
-        dataset_yaml_path = DATASET_ROOT / dataset_name / "dataset.yaml"
+        dataset_yaml_path = DATASET_ROOT / dataset_name / 'dataset.yaml'
     else:
-        logger.warning(f"There is no {DATASET_ROOT}/{dataset_name}.")
+        logger.warning('There is no {}/{}.'.format(DATASET_ROOT, dataset_name))
         if task == 'detection':
-            logger.info(f"Instead embedded COCO128 dataset will be used.")
+            logger.info('Instead embedded COCO128 dataset will be used.')
             dataset_name = 'coco128'
             dataset_yaml_path = CORE_DIR / 'datasets' / 'coco128' / 'dataset.yaml'
-    
-    if not os.path.isfile(dataset_yaml_path):
-        logger.warning(f"Not found dataset.yaml")
-        if task == "classficiation":
-            logger.info(f"Try to make dataset.yaml from {DATASET_ROOT}/{dataset_name}...")
-            dataset_dict = create_classification_dataset_yaml(dataset_name, dataset_yaml_path)
-    
-    with open(dataset_yaml_path) as f:
-        data_dict = yaml.load(f, Loader=yaml.SafeLoader)
-    
-    return data_dict, dataset_yaml_path
 
+    if not dataset_yaml_path or not os.path.isfile(dataset_yaml_path):
+        logger.warning('Not found dataset.yaml at {}'.format(dataset_yaml_path))
+        if task == 'classficiation':
+            logger.info('Try to make dataset.yaml from {}/{}...'.format(DATASET_ROOT, dataset_name))
+            data_dict = create_classification_dataset_yaml(dataset_name, dataset_yaml_path)
+
+    if data_dict is None:
+        with open(dataset_yaml_path) as f:
+            data_dict = yaml.load(f, Loader=yaml.SafeLoader)
+
+    if 'dataset_name' not in data_dict:
+        data_dict['dataset_name'] = dataset_name
+
+    if task == 'segmentation' and data_dict.get('mask_format') is None:
+        logger.info("Setting default mask_format='poly' for segmentation dataset")
+        data_dict['mask_format'] = 'poly'
+
+    return data_dict, dataset_yaml_path
 
 def create_classification_dataset_yaml(dataset_name, yaml_path):
     """
     Create a dataset.yaml file for classification tasks.
-    
-    Args:
-        dataset_name: Name of the dataset
-        yaml_path: Path to save the dataset.yaml file
-        
-    Returns:
-        Dictionary containing dataset information
     """
     dataset_dict = {
-        'train': f'{str(DATASET_ROOT / dataset_name / "train")}',
-        'val': f'{str(DATASET_ROOT / dataset_name / "val")}',
+        'train': str(DATASET_ROOT / dataset_name / 'train'),
+        'val': str(DATASET_ROOT / dataset_name / 'val'),
         'nc': 2,
         'ch': 1,
-        'names': []
+        'names': [],
+        'dataset_name': dataset_name
     }
-    
-    with open(yaml_path, "w") as f:
-        yaml.dump(dataset_dict, f)
-    
+
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(yaml_path, 'w') as f:
+        yaml.dump(dataset_dict, f, sort_keys=False)
+
     return dataset_dict
 
+
+def create_segmentation_dataset_yaml(root_path, yaml_path):
+    """
+    Create a dataset.yaml file for segmentation tasks when none is provided.
+    """
+    existing = {}
+    if yaml_path.exists():
+        try:
+            with open(yaml_path, 'r') as f:
+                existing = yaml.safe_load(f) or {}
+        except Exception as err:
+            logger.warning(f'Failed to read existing dataset yaml {yaml_path}: {err}')
+            existing = {}
+
+    train_dir = root_path / 'images' / 'train'
+    val_dir = root_path / 'images' / 'val'
+    label_dirs = [root_path / 'labels' / 'train', root_path / 'labels' / 'val']
+
+    class_ids = set()
+    for label_dir in label_dirs:
+        if not label_dir.exists():
+            continue
+        for label_file in label_dir.rglob('*.txt'):
+            try:
+                with open(label_file) as lf:
+                    for line in lf:
+                        parts = line.strip().split()
+                        if not parts:
+                            continue
+                        class_ids.add(int(float(parts[0])))
+            except Exception as err:
+                logger.warning(f'Failed to parse {label_file}: {err}')
+
+    nc = max(class_ids) + 1 if class_ids else 1
+    names = [f'class_{i}' for i in range(nc)]
+
+    dataset_dict = dict(existing) if isinstance(existing, dict) else {}
+    dataset_dict.update({
+        'path': str(root_path),
+        'train': str(train_dir),
+        'val': str(val_dir),
+        'mask_format': 'poly',
+        'dataset_name': root_path.name,
+    })
+    prev_nc = dataset_dict.get('nc', 0) or 0
+    dataset_dict['nc'] = max(nc, int(prev_nc))
+    if not dataset_dict.get('names'):
+        dataset_dict['names'] = names
+
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(yaml_path, 'w') as f:
+        yaml.dump(dataset_dict, f, sort_keys=False)
+
+    return dataset_dict
 
 def base_model_select(userid, project_id, proj_info, data, manual_select=False):
     """
@@ -447,6 +514,8 @@ def base_model_select(userid, project_id, proj_info, data, manual_select=False):
         task_ = 'classification-c' if data['nc'] <= 10 else task
     elif task == 'detection':
         task_ = 'detection7' if data['nc'] <= 50 else task
+    elif task == 'segmentation':
+        task_ = 'segmentation'
     else:
         logger.warning(f"\nBMS: Not supported task: {task}")
 
@@ -465,7 +534,10 @@ def base_model_select(userid, project_id, proj_info, data, manual_select=False):
 
     # Handle resnet naming convention
     dirname = model if task_ != 'classification-c' else model[:-1] # remove 'c' from 'resnetc'
-    filename = f'{model}{size}.yaml'
+    if task == 'segmentation':
+        filename = f'{model}{size}-seg.yaml'
+    else:
+        filename = f'{model}{size}.yaml'
 
     # Store basemodel.yaml
     PROJ_PATH = COMMON_ROOT / userid / project_id
@@ -541,7 +613,7 @@ def backup_previous_work(model):
     return bak_dir
 
 
-def run_autonn(userid, project_id, resume=False, viz2code=False, nas=False, hpo=False):
+def run_autonn_cl(userid, project_id, resume=False, viz2code=False, nas=False, hpo=False):
     """
     Main function to run the AutoNN workflow.
     
@@ -638,12 +710,20 @@ def run_autonn(userid, project_id, resume=False, viz2code=False, nas=False, hpo=
     #         logger.warn(f'{prefix}Fail to load tensorbord because {e}')
 
     # Train model
-    results, train_final = train(proj_info, hyp, opt, data, tb_writer)
+    results, train_final = train_continual(proj_info, hyp, opt, data, tb_writer)
 
     # Log training results
-    best_acc = results[3] if task == 'detection' else results[0]
+    if task == 'segmentation':
+        best_metric = results[0]
+        metric_label = 'IoU'
+    elif task == 'detection':
+        best_metric = results[3]
+        metric_label = 'mAP@0.5:0.95'
+    else:
+        best_metric = results[0]
+        metric_label = 'accuracy'
     logger.info(
-        f'{colorstr("Train: ")}Training complete. Best results: {best_acc:.2f},'
+        f'{colorstr("Train: ")}Training complete. Best {metric_label}: {best_metric:.4f},'
         f' Best model saved as: {train_final}\n'
     )
 
@@ -746,7 +826,8 @@ def run_autonn(userid, project_id, resume=False, viz2code=False, nas=False, hpo=
     fuse_layers(train_final, prefix=colorstr("Model Exporter: "))
 
     # Save training configuration
-    opt.best_acc = float(best_acc)  # numpy.float64 to float
+    best_metric = float(best_metric)
+    opt.best_acc = best_metric  # re-used downstream
     opt.weights = str(train_final)
 
     with open(Path(opt.save_dir) / 'opt.yaml', 'w') as f:
@@ -796,7 +877,7 @@ def export_model(userid, project_id, train_final, opt, data, basemodel,
     channel = data.get('ch')
     convert = ['torchscript', 'onnx']
 
-    if task == 'detection':
+    if task in ['detection', 'segmentation']:
         if target_engine == 'tensorrt':
             convert.append('onnx_end2end')
         if target_engine == 'tflite':
@@ -848,8 +929,13 @@ def print_export_summary(train_final, results, convert, task, dst_nninfo_path):
     """
     # Print source model information
     mb = os.path.getsize(train_final) / 1E6  # filesize
-    if task == 'detection':
-        logger.info(f'Source Model = {train_final}({mb:.1f} MB), {results[3]} mAP')
+    if task in ['detection', 'segmentation']:
+        metric_value = results[3] if isinstance(results, (list, tuple)) and len(results) > 3 else None
+        metric_label = 'IoU' if task == 'segmentation' else 'mAP'
+        if metric_value is not None:
+            logger.info(f'Source Model = {train_final}({mb:.1f} MB), {metric_value} {metric_label}')
+        else:
+            logger.info(f'Source Model = {train_final}({mb:.1f} MB)')
     elif task == 'classification':
         logger.info(f'Source Model = {train_final}({mb:.1f} MB), val-accuracy = {results[0]}')
 
