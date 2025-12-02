@@ -13,7 +13,7 @@
     </div>
     <v-banner v-model="isBanner" single-line transition="slide-y-transition" class="pl-3">
       <div class="pa-3 pt-5">
-        <slot name="content"> </slot>
+        <slot name="content" :isOpen="isBanner"> </slot>
       </div>
     </v-banner>
   </div>
@@ -26,13 +26,20 @@ export default {
     },
     count: {
       default: 0
+    },
+    defaultBanner: {
+      default: false
     }
   },
 
   data() {
     return {
-      isBanner: true
+      isBanner: false
     };
+  },
+
+  created() {
+    this.isBanner = this.defaultBanner;
   }
 };
 </script>

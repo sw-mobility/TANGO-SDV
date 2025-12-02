@@ -24,7 +24,7 @@ export async function getProjectInfo(id) {
   return response.data;
 }
 
-export async function createProject(name, description) {
+export async function createProject(name, description = "") {
   let response = null;
 
   try {
@@ -135,6 +135,82 @@ export async function setWorkflow(project_id, workflow) {
 
   try {
     response = await axios.post("/api/set_workflow", { project_id: project_id, workflow: workflow });
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function get_autonn_status(project_id) {
+  let response = null;
+
+  try {
+    response = await axios.post("/api/get_autonn_status", { project_id: project_id });
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function get_common_folder_structure() {
+  let response = null;
+
+  try {
+    response = await axios.get("/api/get_common_folder_structure");
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function getProjectHyperparameterFile(project_id) {
+  let response = null;
+
+  try {
+    response = await axios.get("/api/get_project_hyperparameter_file", {
+      params: { project_id: project_id }
+    });
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function updateProjectHyperparameterFile(project_id, content) {
+  let response = null;
+
+  try {
+    response = await axios.post("/api/update_project_hyperparameter_file", { project_id, content });
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function getProjectArgumentsFile(project_id) {
+  let response = null;
+
+  try {
+    response = await axios.get("/api/get_project_arguments_file", {
+      params: { project_id: project_id }
+    });
+  } catch (error) {
+    throw new Error(error);
+  }
+
+  return response.data;
+}
+
+export async function updateProjectArgumentsFile(project_id, content) {
+  let response = null;
+
+  try {
+    response = await axios.post("/api/update_project_arguments_file", { project_id, content });
   } catch (error) {
     throw new Error(error);
   }

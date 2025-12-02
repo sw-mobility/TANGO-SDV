@@ -91,9 +91,10 @@ import Swal from "sweetalert2";
 import { mapMutations } from "vuex";
 import { ProjectNamespace, ProjectMutations } from "@/store/modules/project";
 
-import ProjectCreateDialog from "@/modules/project/ProjectCreateDialog.vue";
+import ProjectCreateDialog from "@/modules/project/ProjectCreateDialogV2.vue";
 
 import { deleteProject, getTargetInfo, getDatasetListTango } from "@/api";
+import { TaskType } from "@/shared/enums";
 export default {
   components: { ProjectCreateDialog },
 
@@ -107,12 +108,12 @@ export default {
 
     projectInfo: {
       default: () => ({
-        project_name: "project_name",
-        project_description: "project_description",
-        dataset: "coco128",
-        target: "n_cloud",
-        task_type: "detection",
-        nas_type: "neck_nas"
+        project_name: "",
+        project_description: "",
+        dataset: "",
+        target: "",
+        task_type: "",
+        nas_type: ""
       })
     }
   },
@@ -143,7 +144,8 @@ export default {
     ...mapMutations(ProjectNamespace, {
       SET_PROJECT: ProjectMutations.SET_PROJECT,
       SET_SELECTED_TARGET: ProjectMutations.SET_SELECTED_TARGET,
-      SET_SELECTED_IMAGE: ProjectMutations.SET_SELECTED_IMAGE
+      SET_SELECTED_IMAGE: ProjectMutations.SET_SELECTED_IMAGE,
+      INIT_PROJECT: ProjectMutations.INIT_PROJECT
     }),
 
     async setupBtn() {
@@ -173,7 +175,7 @@ export default {
     navigation() {
       let status = true;
       const info = this.projectInfo;
-      if (!info?.dataset || info?.dataset === "") status = false;
+      if (info.task_type !== TaskType.CHAT && (!info?.dataset || info?.dataset === "")) status = false;
       else if (!info?.target_id || !info?.target_info) status = false;
       else if (!info?.target_id || info?.target_id === "") status = false;
       else if (!info?.task_type || info?.task_type === "") status = false;
@@ -210,6 +212,7 @@ export default {
 
     close() {
       this.$EventBus.$emit("projectDialogclose");
+      this.INIT_PROJECT();
     },
 
     onStepChange(step) {

@@ -1,13 +1,14 @@
 import Vue from "vue";
 import VueRouter from "vue-router";
 import ProjectDashboard from "@/pages/ProjectDashboard.vue";
-import ProjectDetail from "@/pages/ProjectDetail.vue";
+import ProjectDetail from "@/pages/ProjectDetailV2.vue";
 import LoginPage from "@/pages/LoginPage.vue";
 import CreatAccountPage from "@/pages/CreateAccountPage.vue";
 import NotFoundPage from "@/pages/NotFoundPage.vue";
 import VisualizationPage from "@/pages/VisualizationPage.vue";
-import DataManagement from "@/pages/DataManagement.vue";
-import TargetManagement from "@/pages/TargetManagement.vue";
+import DataLebeling from "@/pages/DataLebeling.vue";
+import DatasetManagement from "@/pages/DatasetManagement.vue";
+import TargetManagement from "@/pages/TargetManagementV2.vue";
 
 import Cookies from "universal-cookie";
 
@@ -21,12 +22,12 @@ const routes = [
   {
     path: "/login",
     component: LoginPage,
-    meta: { permision: "guest" }
+    meta: { permission: "guest" }
   },
   {
     path: "/create-account",
     component: CreatAccountPage,
-    meta: { permision: "guest" }
+    meta: { permission: "guest" }
   },
   {
     path: "/project",
@@ -44,9 +45,14 @@ const routes = [
     component: TargetManagement
   },
   {
-    path: "/data",
-    name: "datasets",
-    component: DataManagement
+    path: "/dataset",
+    name: "dataset",
+    component: DatasetManagement
+  },
+  {
+    path: "/labeling",
+    name: "labeling",
+    component: DataLebeling
   },
   {
     path: "/visualization",
@@ -71,9 +77,9 @@ const isToken = () => new Cookies().get("TANGO_TOKEN");
 const isUser = () => new Cookies().get("userinfo");
 
 router.beforeEach(async (to, from, next) => {
-  const { permision } = to.meta;
+  const { permission } = to.meta;
 
-  if (permision === undefined)
+  if (permission === undefined)
     if (!!isToken() === false || !!isUser() === false) {
       next("/login");
     } else {

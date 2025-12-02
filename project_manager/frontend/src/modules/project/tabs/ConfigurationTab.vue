@@ -9,21 +9,24 @@
       <div style="width: 25%">
         <h4 class="ml-3 mt-3">Task Type</h4>
         <v-radio-group v-model="taskType" row hide-details class="ma-0 mt-2 ml-3" readonly>
-          <v-radio label="Classification" value="classification"></v-radio>
-          <v-radio label="Detection" value="detection"></v-radio>
+          <v-radio label="Classification" :value="TaskType.CLASSIFICATION"></v-radio>
+          <v-radio label="Detection" :value="TaskType.DETECTION"></v-radio>
+          <!-- <v-radio label="Chat" :value="TaskType.CHAT"></v-radio> -->
         </v-radio-group>
       </div>
     </div>
 
     <div class="d-flex">
-      <div style="width: 50%">
+      <div style="width: 50%" v-if="selectedImage">
+        <!-- <div style="width: 50%"> -->
         <h4 class="ml-3 mt-3">Dataset</h4>
-        <DatasetCard :item="selectedImage" v-if="isDatasetLoading" />
+        <DatasetCard v-if="isDatasetLoading" :item="selectedImage" />
         <SkeletonLoaderCard v-else />
       </div>
-      <div style="width: 50%">
+      <div :style="{ width: selectedImage ? '50%' : '100%' }">
+        <!-- <div style="width: 50%"> -->
         <h4 class="ml-3 mt-3">Target</h4>
-        <TargetCard :item="selectedTarget" v-if="isTargetLoading" />
+        <TargetCard v-if="isTargetLoading" ref="targetCaredRef" :item="selectedTarget" />
         <SkeletonLoaderCard v-else />
       </div>
     </div>
@@ -86,22 +89,31 @@
   </div>
 </template>
 <script>
+// import Vue from "vue";
+
 import DatasetCard from "@/modules/common/card/DatasetCard.vue";
-import TargetCard from "@/modules/common/card/TargetCard.vue";
+import TargetCard from "@/modules/common/card/TargetCardV2.vue";
 import SkeletonLoaderCard from "@/modules/common/card/SkeletonLoaderCard.vue";
 
-import { getTargetInfo, getDatasetListTango } from "@/api";
+import { TaskType } from "@/shared/enums";
+
+// import { getTargetInfo, getDatasetListTango, getDatasetFolderSize, getDatasetFileCount } from "@/api";
 export default {
   components: { DatasetCard, TargetCard, SkeletonLoaderCard },
 
   props: {
     projectInfo: {
       default: null
+    },
+
+    isOpen: {
+      default: false
     }
   },
 
   data() {
     return {
+      TaskType,
       taskType: "",
       nasType: "",
       description: "",
@@ -156,24 +168,29 @@ export default {
         this.outputMethod = this.projectInfo.deploy_output_method;
         this.inputSource = this.projectInfo.deploy_input_source;
 
-        if (!this.selectedTarget) {
-          await getTargetInfo(this.projectInfo.target_id).then(res => {
-            this.selectedTarget = res;
-            this.isTargetLoading = true;
-          });
-        }
-        if (!this.selectedImage) {
-          await getDatasetListTango().then(res => {
-            const datasetInfo = res.find(q => q.name === this.projectInfo.dataset);
-            if (datasetInfo) {
-              this.selectedImage = datasetInfo;
-              this.isDatasetLoading = true;
-            }
-          });
-        }
+        this.selectedTarget = this.projectInfo?.target_info;
+        this.isTargetLoading = true;
+        this.selectedImage = this.projectInfo?.datasetObject;
+        this.isDatasetLoading = true;
+      }
+    },
+
+    isOpen: {
+      immediate: true,
+      deep: true,
+      handler() {
+        this.$nextTick(() => {
+          if (this.isOpen) {
+            const targetCaredRef = this.$refs.targetCaredRef;
+            if (!targetCaredRef) return;
+            targetCaredRef.setAnimation();
+          }
+        });
       }
     }
-  }
+  },
+
+  methods: {}
 };
 </script>
 <style lang="scss" scoped></style>
