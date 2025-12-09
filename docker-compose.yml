@@ -29,7 +29,6 @@ services:
 
   #---------------------------------
   # DB for Project Manager
-  
   #---------------------------------
   postgresql:
     image: postgres:15.4
