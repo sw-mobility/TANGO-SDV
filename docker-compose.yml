@@ -1,9 +1,6 @@
 services:
   #---------------------------------
   # Project Manager
-
-
-  
   #---------------------------------
   project_manager:
     build:
